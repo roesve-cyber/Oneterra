@@ -164,16 +164,8 @@
                     <label>Cuenta destino</label>
                     <select id="movCuentaDestino"></select>
                 </div>
-                <div class="fila-2">
-                    <div>
-                        <label>Monto</label>
-                        <input type="number" id="movMonto" step="0.01" placeholder="0.00">
-                    </div>
-                    <div>
-                        <label>Comprobante (foto, opcional)</label>
-                        <input type="file" id="movEvidencia" accept="image/*">
-                    </div>
-                </div>
+                <label>Monto</label>
+                <input type="number" id="movMonto" step="0.01" placeholder="0.00">
                 <label>Concepto</label>
                 <input type="text" id="movConcepto" placeholder="¿De qué fue este movimiento?">
                 <button class="btn-primario" id="btnGuardarMovimiento" onclick="guardarMovimiento()">💾 Registrar movimiento</button>
@@ -206,16 +198,8 @@
                 <input type="text" id="divFuente" placeholder="Ej. Acciones XYZ, Sociedad ABC">
                 <label>¿A qué cuenta entró? (opcional)</label>
                 <select id="divCuenta"></select>
-                <div class="fila-2">
-                    <div>
-                        <label>Nota (opcional)</label>
-                        <input type="text" id="divNota" placeholder="Detalle adicional">
-                    </div>
-                    <div>
-                        <label>Comprobante (foto, opcional)</label>
-                        <input type="file" id="divEvidencia" accept="image/*">
-                    </div>
-                </div>
+                <label>Nota (opcional)</label>
+                <input type="text" id="divNota" placeholder="Detalle adicional">
                 <button class="btn-primario" id="btnGuardarDividendo" onclick="guardarDividendo()">💾 Registrar dividendo</button>
             </div>
             <div class="tarjeta">
@@ -229,7 +213,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>

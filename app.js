@@ -153,7 +153,6 @@ async function guardarMovimiento() {
     const cuentaDestinoId = $('movCuentaDestino').value;
     const monto = parseFloat($('movMonto').value) || 0;
     const concepto = $('movConcepto').value.trim();
-    const archivo = $('movEvidencia').files[0];
 
     if (!cuentaId) return alert('Elige la cuenta.');
     if (tipo === 'transferencia' && (!cuentaDestinoId || cuentaDestinoId === cuentaId)) {
@@ -166,12 +165,8 @@ async function guardarMovimiento() {
     btn.disabled = true;
     btn.textContent = 'Guardando...';
     try {
-        let evidenciaUrl = '';
-        if (archivo) evidenciaUrl = await subirEvidencia(archivo, 'movimientos');
-
         const datos = {
             fecha, tipo, cuentaId, monto, concepto,
-            evidenciaUrl,
             creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
             creadoPor: auth.currentUser?.email || ''
         };
@@ -180,7 +175,6 @@ async function guardarMovimiento() {
         await db.collection('movimientos').add(datos);
         $('movMonto').value = '';
         $('movConcepto').value = '';
-        $('movEvidencia').value = '';
     } catch (err) {
         alert('No se pudo guardar el movimiento: ' + err.message);
     } finally {
@@ -229,7 +223,6 @@ function renderMovimientos() {
                 <div class="fm-concepto">${esc(m.concepto || '')}</div>
             </div>
             <div class="fm-monto ${colorMonto}">${dinero(m.monto)}</div>
-            ${m.evidenciaUrl ? `<a href="${m.evidenciaUrl}" target="_blank" rel="noopener" class="fm-evidencia" title="Ver comprobante">📎</a>` : '<span class="fm-evidencia-vacia"></span>'}
             <button class="btn-icono" title="Eliminar" onclick="eliminarMovimiento('${m.id}')">🗑️</button>
         </div>`;
     }).join('');
@@ -242,7 +235,6 @@ async function guardarDividendo() {
     const fuente = $('divFuente').value.trim();
     const nota = $('divNota').value.trim();
     const cuentaId = $('divCuenta').value;
-    const archivo = $('divEvidencia').files[0];
 
     if (monto <= 0) return alert('El monto debe ser mayor a 0.');
     if (!fuente) return alert('Escribe de dónde vino el dividendo.');
@@ -251,9 +243,6 @@ async function guardarDividendo() {
     btn.disabled = true;
     btn.textContent = 'Guardando...';
     try {
-        let evidenciaUrl = '';
-        if (archivo) evidenciaUrl = await subirEvidencia(archivo, 'dividendos');
-
         let movimientoId = null;
         // Si se liga a una cuenta, se crea también el movimiento de depósito
         // correspondiente -- así el saldo de esa cuenta ya lo refleja solo,
@@ -263,7 +252,6 @@ async function guardarDividendo() {
                 fecha, tipo: 'deposito', cuentaId, monto,
                 concepto: `Dividendo: ${fuente}`,
                 esDividendo: true,
-                evidenciaUrl,
                 creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
                 creadoPor: auth.currentUser?.email || ''
             });
@@ -272,7 +260,6 @@ async function guardarDividendo() {
 
         await db.collection('dividendos').add({
             fecha, monto, fuente, nota, cuentaId: cuentaId || null, movimientoId,
-            evidenciaUrl,
             creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
             creadoPor: auth.currentUser?.email || ''
         });
@@ -280,7 +267,6 @@ async function guardarDividendo() {
         $('divMonto').value = '';
         $('divFuente').value = '';
         $('divNota').value = '';
-        $('divEvidencia').value = '';
     } catch (err) {
         alert('No se pudo guardar el dividendo: ' + err.message);
     } finally {
@@ -315,7 +301,6 @@ function renderDividendos() {
                 <div class="fm-concepto">${esc(d.nota || '')}</div>
             </div>
             <div class="fm-monto positivo">${dinero(d.monto)}</div>
-            ${d.evidenciaUrl ? `<a href="${d.evidenciaUrl}" target="_blank" rel="noopener" class="fm-evidencia" title="Ver comprobante">📎</a>` : '<span class="fm-evidencia-vacia"></span>'}
             <button class="btn-icono" title="Eliminar" onclick="eliminarDividendo('${d.id}')">🗑️</button>
         </div>`;
     }).join('');
@@ -342,12 +327,6 @@ function renderResumen() {
 }
 
 // ---------- UTILIDADES ----------
-async function subirEvidencia(archivo, carpeta) {
-    const ref = storage.ref().child(`evidencias/${carpeta}/${Date.now()}_${archivo.name}`);
-    await ref.put(archivo);
-    return ref.getDownloadURL();
-}
-
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
