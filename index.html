@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mis Finanzas</title>
+<style>
+    :root {
+        --azul: #1e40af; --azul-claro: #eff6ff; --verde: #16a34a; --rojo: #dc2626;
+        --gris: #64748b; --fondo: #f8fafc; --borde: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--fondo); color: #0f172a; }
+
+    #pantallaLogin { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .caja-login { background: white; padding: 32px 28px; border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,.08); width: 100%; max-width: 340px; }
+    .caja-login h1 { font-size: 20px; margin: 0 0 20px; text-align: center; }
+    .caja-login input { width: 100%; padding: 11px; margin-bottom: 10px; border: 1px solid var(--borde); border-radius: 8px; font-size: 14px; }
+    .caja-login button { width: 100%; padding: 12px; background: var(--azul); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; }
+    #loginError { color: var(--rojo); font-size: 12.5px; margin-bottom: 8px; min-height: 16px; }
+
+    header { background: var(--azul); color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 17px; margin: 0; }
+    header button { background: rgba(255,255,255,.15); color: white; border: none; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+    #correoActual { font-size: 12px; opacity: .85; margin-right: 10px; }
+
+    nav { display: flex; background: white; border-bottom: 1px solid var(--borde); overflow-x: auto; }
+    .tab-btn { flex: 1; padding: 13px 8px; background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--gris); border-bottom: 3px solid transparent; white-space: nowrap; }
+    .tab-btn.activa { color: var(--azul); border-bottom-color: var(--azul); }
+
+    main { max-width: 760px; margin: 0 auto; padding: 18px 14px 60px; }
+    .pestana { display: none; }
+    .tarjeta { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .tarjeta h2 { font-size: 14px; margin: 0 0 12px; color: var(--azul); }
+
+    label { display: block; font-size: 12px; color: var(--gris); font-weight: 700; margin: 8px 0 4px; }
+    input, select, textarea { width: 100%; padding: 9px; border: 1px solid var(--borde); border-radius: 7px; font-size: 13.5px; font-family: inherit; }
+    .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn-primario { margin-top: 14px; width: 100%; padding: 11px; background: var(--azul); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13.5px; }
+    .btn-primario:disabled { opacity: .6; }
+
+    .filtros { display: flex; gap: 8px; margin-bottom: 12px; }
+    .filtros select, .filtros input { font-size: 12.5px; padding: 7px; }
+
+    .vacio { color: #94a3b8; font-size: 13px; text-align: center; padding: 20px 0; }
+
+    .tarjeta-cuenta { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--borde); border-radius: 10px; margin-bottom: 8px; }
+    .tarjeta-cuenta-icono { font-size: 22px; }
+    .tarjeta-cuenta-info { flex: 1; }
+    .tarjeta-cuenta-nombre { font-weight: 700; font-size: 14px; }
+    .tarjeta-cuenta-tipo { font-size: 11.5px; color: var(--gris); }
+    .tarjeta-cuenta-saldo { font-weight: 800; font-size: 15px; color: var(--verde); }
+    .tarjeta-cuenta-saldo.negativo { color: var(--rojo); }
+
+    .fila-movimiento { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #f1f5f9; }
+    .fm-fecha { font-size: 11.5px; color: var(--gris); width: 70px; flex-shrink: 0; }
+    .fm-detalle { flex: 1; min-width: 0; }
+    .fm-tipo { font-size: 12.5px; font-weight: 700; }
+    .fm-cuenta { font-weight: 400; color: var(--gris); }
+    .fm-concepto { font-size: 12px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fm-monto { font-weight: 800; font-size: 13.5px; flex-shrink: 0; }
+    .fm-monto.positivo { color: var(--verde); }
+    .fm-monto.negativo { color: var(--rojo); }
+    .fm-evidencia, .fm-evidencia-vacia { width: 20px; text-align: center; flex-shrink: 0; }
+    .btn-icono { background: none; border: none; cursor: pointer; font-size: 15px; opacity: .6; flex-shrink: 0; }
+    .btn-icono:hover { opacity: 1; }
+
+    .resumen-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .tarjeta-resumen { background: var(--azul-claro); border-radius: 10px; padding: 14px; }
+    .tr-label { font-size: 11.5px; color: var(--gris); font-weight: 700; }
+    .tr-valor { font-size: 18px; font-weight: 800; color: var(--azul); margin-top: 4px; }
+    @media (min-width: 480px) { .resumen-grid { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+
+<div id="pantallaLogin">
+    <div class="caja-login">
+        <h1>💰 Mis Finanzas</h1>
+        <div id="loginError"></div>
+        <input type="email" id="loginEmail" placeholder="Correo">
+        <input type="password" id="loginPass" placeholder="Contraseña">
+        <button onclick="iniciarSesion()">Entrar</button>
+    </div>
+</div>
+
+<div id="appPrincipal" style="display:none;">
+    <header>
+        <h1>💰 Mis Finanzas</h1>
+        <div>
+            <span id="correoActual"></span>
+            <button onclick="cerrarSesion()">Salir</button>
+        </div>
+    </header>
+
+    <nav>
+        <button class="tab-btn activa" id="tab-resumen" onclick="cambiarPestana('resumen')">Resumen</button>
+        <button class="tab-btn" id="tab-cuentas" onclick="cambiarPestana('cuentas')">Cuentas</button>
+        <button class="tab-btn" id="tab-movimientos" onclick="cambiarPestana('movimientos')">Movimientos</button>
+        <button class="tab-btn" id="tab-dividendos" onclick="cambiarPestana('dividendos')">Dividendos</button>
+    </nav>
+
+    <main>
+        <!-- RESUMEN -->
+        <div class="pestana" id="pestana-resumen" style="display:block;">
+            <div class="tarjeta">
+                <h2>Resumen general</h2>
+                <div class="resumen-grid" id="resumenTotales"></div>
+            </div>
+            <div class="tarjeta">
+                <h2>Saldo por cuenta</h2>
+                <div id="listaCuentasResumen"></div>
+            </div>
+        </div>
+
+        <!-- CUENTAS -->
+        <div class="pestana" id="pestana-cuentas">
+            <div class="tarjeta">
+                <h2>Agregar cuenta</h2>
+                <label>Nombre (ej. BBVA Nómina, Efectivo)</label>
+                <input type="text" id="cuentaNombre" placeholder="Nombre de la cuenta">
+                <div class="fila-2">
+                    <div>
+                        <label>Tipo</label>
+                        <select id="cuentaTipo">
+                            <option value="banco">Cuenta bancaria</option>
+                            <option value="efectivo">Efectivo</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Saldo inicial</label>
+                        <input type="number" id="cuentaSaldoInicial" value="0" step="0.01">
+                    </div>
+                </div>
+                <button class="btn-primario" onclick="guardarCuenta()">➕ Agregar cuenta</button>
+            </div>
+            <div class="tarjeta">
+                <h2>Tus cuentas</h2>
+                <div id="listaCuentas"></div>
+            </div>
+        </div>
+
+        <!-- MOVIMIENTOS -->
+        <div class="pestana" id="pestana-movimientos">
+            <div class="tarjeta">
+                <h2>Registrar movimiento</h2>
+                <div class="fila-2">
+                    <div>
+                        <label>Fecha</label>
+                        <input type="date" id="movFecha">
+                    </div>
+                    <div>
+                        <label>Tipo</label>
+                        <select id="movTipo" onchange="$('movCuentaDestinoWrap').style.display = this.value==='transferencia' ? 'block' : 'none';">
+                            <option value="deposito">Depósito / ingreso</option>
+                            <option value="retiro">Retiro / gasto</option>
+                            <option value="transferencia">Transferencia entre mis cuentas</option>
+                        </select>
+                    </div>
+                </div>
+                <label id="movCuentaLabel">Cuenta</label>
+                <select id="movCuenta"></select>
+                <div id="movCuentaDestinoWrap" style="display:none;">
+                    <label>Cuenta destino</label>
+                    <select id="movCuentaDestino"></select>
+                </div>
+                <div class="fila-2">
+                    <div>
+                        <label>Monto</label>
+                        <input type="number" id="movMonto" step="0.01" placeholder="0.00">
+                    </div>
+                    <div>
+                        <label>Comprobante (foto, opcional)</label>
+                        <input type="file" id="movEvidencia" accept="image/*">
+                    </div>
+                </div>
+                <label>Concepto</label>
+                <input type="text" id="movConcepto" placeholder="¿De qué fue este movimiento?">
+                <button class="btn-primario" id="btnGuardarMovimiento" onclick="guardarMovimiento()">💾 Registrar movimiento</button>
+            </div>
+            <div class="tarjeta">
+                <h2>Historial</h2>
+                <div class="filtros">
+                    <select id="filtroCuenta" onchange="renderMovimientos()"></select>
+                    <input type="month" id="filtroMes" onchange="renderMovimientos()">
+                </div>
+                <div id="listaMovimientos"></div>
+            </div>
+        </div>
+
+        <!-- DIVIDENDOS -->
+        <div class="pestana" id="pestana-dividendos">
+            <div class="tarjeta">
+                <h2>Registrar dividendo</h2>
+                <div class="fila-2">
+                    <div>
+                        <label>Fecha</label>
+                        <input type="date" id="divFecha">
+                    </div>
+                    <div>
+                        <label>Monto</label>
+                        <input type="number" id="divMonto" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+                <label>Fuente (¿de qué empresa / inversión?)</label>
+                <input type="text" id="divFuente" placeholder="Ej. Acciones XYZ, Sociedad ABC">
+                <label>¿A qué cuenta entró? (opcional)</label>
+                <select id="divCuenta"></select>
+                <div class="fila-2">
+                    <div>
+                        <label>Nota (opcional)</label>
+                        <input type="text" id="divNota" placeholder="Detalle adicional">
+                    </div>
+                    <div>
+                        <label>Comprobante (foto, opcional)</label>
+                        <input type="file" id="divEvidencia" accept="image/*">
+                    </div>
+                </div>
+                <button class="btn-primario" id="btnGuardarDividendo" onclick="guardarDividendo()">💾 Registrar dividendo</button>
+            </div>
+            <div class="tarjeta">
+                <h2>Historial de dividendos</h2>
+                <div id="listaDividendos"></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
