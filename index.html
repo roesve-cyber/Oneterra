@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mis Finanzas</title>
+<title>One Terra</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1e40af">
+<meta name="theme-color" content="#0d1b33">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
     :root {
-        --azul: #1e40af; --azul-claro: #eff6ff; --verde: #16a34a; --rojo: #dc2626;
-        --gris: #64748b; --fondo: #f8fafc; --borde: #e2e8f0;
+        --azul: #0d1b33; --azul-claro: #e9f5f3; --verde: #16a34a; --rojo: #dc2626;
+        --dorado: #c99a3f; --gris: #64748b; --fondo: #f7f8fa; --borde: #e2e8f0;
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--fondo); color: #0f172a; }
@@ -23,14 +23,14 @@
     .caja-login button { width: 100%; padding: 12px; background: var(--azul); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; }
     #loginError { color: var(--rojo); font-size: 12.5px; margin-bottom: 8px; min-height: 16px; }
 
-    header { background: var(--azul); color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+    header { background: var(--azul); color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid var(--dorado); }
     header h1 { font-size: 17px; margin: 0; }
     header button { background: rgba(255,255,255,.15); color: white; border: none; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
     #correoActual { font-size: 12px; opacity: .85; margin-right: 10px; }
 
     nav { display: flex; background: white; border-bottom: 1px solid var(--borde); overflow-x: auto; }
     .tab-btn { flex: 1; padding: 13px 8px; background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--gris); border-bottom: 3px solid transparent; white-space: nowrap; }
-    .tab-btn.activa { color: var(--azul); border-bottom-color: var(--azul); }
+    .tab-btn.activa { color: var(--azul); border-bottom-color: var(--dorado); }
 
     main { max-width: 760px; margin: 0 auto; padding: 18px 14px 60px; }
     .pestana { display: none; }
@@ -40,7 +40,8 @@
     label { display: block; font-size: 12px; color: var(--gris); font-weight: 700; margin: 8px 0 4px; }
     input, select, textarea { width: 100%; padding: 9px; border: 1px solid var(--borde); border-radius: 7px; font-size: 13.5px; font-family: inherit; }
     .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .btn-primario { margin-top: 14px; width: 100%; padding: 11px; background: var(--azul); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13.5px; }
+    .btn-primario { margin-top: 14px; width: 100%; padding: 11px; background: var(--azul); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13.5px; transition: filter .15s; }
+    .btn-primario:hover { filter: brightness(1.25); }
     .btn-primario:disabled { opacity: .6; }
 
     .filtros { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -80,7 +81,7 @@
 
 <div id="pantallaLogin">
     <div class="caja-login">
-        <h1>💰 Mis Finanzas</h1>
+        <h1>🌎 One Terra</h1>
         <div id="loginError"></div>
         <input type="email" id="loginEmail" placeholder="Correo">
         <input type="password" id="loginPass" placeholder="Contraseña">
@@ -90,7 +91,7 @@
 
 <div id="appPrincipal" style="display:none;">
     <header>
-        <h1>💰 Mis Finanzas</h1>
+        <h1>🌎 One Terra</h1>
         <div>
             <span id="correoActual"></span>
             <button onclick="cerrarSesion()">Salir</button>
@@ -102,6 +103,7 @@
         <button class="tab-btn" id="tab-cuentas" onclick="cambiarPestana('cuentas')">Cuentas</button>
         <button class="tab-btn" id="tab-movimientos" onclick="cambiarPestana('movimientos')">Movimientos</button>
         <button class="tab-btn" id="tab-dividendos" onclick="cambiarPestana('dividendos')">Dividendos</button>
+        <button class="tab-btn" id="tab-reportes" onclick="cambiarPestana('reportes')">Reportes</button>
     </nav>
 
     <main>
@@ -211,13 +213,49 @@
                 <div id="listaDividendos"></div>
             </div>
         </div>
+
+        <!-- REPORTES -->
+        <div class="pestana" id="pestana-reportes">
+            <div class="tarjeta">
+                <h2>Generar estado de cuenta (imagen)</h2>
+                <label>Cuenta</label>
+                <select id="repCuenta"></select>
+                <label>Periodo</label>
+                <select id="repPeriodoTipo" onchange="actualizarRangoReporte()">
+                    <option value="mes-actual">Mes actual</option>
+                    <option value="mes-anterior">Mes anterior</option>
+                    <option value="todo">Todo el historial</option>
+                    <option value="personalizado">Rango personalizado</option>
+                </select>
+                <div class="fila-2" id="repRangoPersonalizado" style="display:none;">
+                    <div>
+                        <label>Desde</label>
+                        <input type="date" id="repDesde">
+                    </div>
+                    <div>
+                        <label>Hasta</label>
+                        <input type="date" id="repHasta">
+                    </div>
+                </div>
+                <button class="btn-primario" id="btnGenerarReporte" onclick="generarReporte()">🖼️ Generar imagen</button>
+            </div>
+            <div class="tarjeta" id="repResultado" style="display:none;">
+                <h2>Vista previa</h2>
+                <img id="repPreviewImg" style="width:100%; border-radius:8px; border:1px solid var(--borde); display:block; margin-bottom:12px;">
+                <button class="btn-primario" onclick="descargarReporte()">⬇️ Descargar imagen</button>
+                <button class="btn-primario" style="background:var(--verde); margin-top:8px;" onclick="compartirReporte()">📤 Compartir</button>
+            </div>
+        </div>
     </main>
+
+    <div id="repRenderArea" style="position:absolute; left:-9999px; top:0;"></div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {

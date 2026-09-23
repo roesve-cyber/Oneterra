@@ -55,12 +55,14 @@ function iniciarEscuchas() {
     _unsubs.push(db.collection('movimientos').orderBy('fecha', 'desc').onSnapshot(snap => {
         _movimientos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderMovimientos();
+        renderCuentas();
         renderResumen();
     }, err => console.error('Error leyendo movimientos:', err)));
 
     _unsubs.push(db.collection('dividendos').orderBy('fecha', 'desc').onSnapshot(snap => {
         _dividendos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderDividendos();
+        renderCuentas();
         renderResumen();
     }, err => console.error('Error leyendo dividendos:', err)));
 }
@@ -134,12 +136,13 @@ function renderCuentas() {
 
 function renderSelectsCuentas() {
     const opciones = _cuentas.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
-    ['movCuenta', 'movCuentaDestino', 'divCuenta', 'filtroCuenta'].forEach(id => {
+    ['movCuenta', 'movCuentaDestino', 'divCuenta', 'filtroCuenta', 'repCuenta'].forEach(id => {
         const sel = $(id);
         if (!sel) return;
         const valorPrevio = sel.value;
         const extra = id === 'divCuenta' ? '<option value="">-- Sin ligar a cuenta --</option>'
-            : id === 'filtroCuenta' ? '<option value="">Todas las cuentas</option>' : '';
+            : id === 'filtroCuenta' ? '<option value="">Todas las cuentas</option>'
+            : id === 'repCuenta' ? '<option value="">🌐 Todas las cuentas (global)</option>' : '';
         sel.innerHTML = extra + opciones;
         if ([...sel.options].some(o => o.value === valorPrevio)) sel.value = valorPrevio;
     });
@@ -342,3 +345,259 @@ function cambiarPestana(nombre) {
 window.addEventListener('DOMContentLoaded', () => {
     ['movFecha', 'divFecha'].forEach(id => { if ($(id)) $(id).value = hoyISO(); });
 });
+
+// ============================================================
+// ---------- REPORTES (estado de cuenta en imagen) ----------
+// ============================================================
+let _ultimoReporteDataUrl = null;
+let _ultimoReporteNombre = 'estado-cuenta.png';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function fechaLocalISO(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function slugify(s) {
+    return String(s || 'cuenta').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'cuenta';
+}
+
+function actualizarRangoReporte() {
+    $('repRangoPersonalizado').style.display = $('repPeriodoTipo').value === 'personalizado' ? 'grid' : 'none';
+}
+
+// Efecto (+/-) de un movimiento sobre el saldo, según el "alcance" del reporte:
+// cuentaId === null -> saldo GLOBAL (las transferencias entre cuentas propias no lo mueven).
+// cuentaId === 'xxx' -> saldo de esa cuenta en particular.
+function efectoMovimientoReporte(m, cuentaId) {
+    const monto = Number(m.monto) || 0;
+    if (!cuentaId) {
+        if (m.tipo === 'deposito') return monto;
+        if (m.tipo === 'retiro') return -monto;
+        return 0;
+    }
+    if (m.tipo === 'deposito' && m.cuentaId === cuentaId) return monto;
+    if (m.tipo === 'retiro' && m.cuentaId === cuentaId) return -monto;
+    if (m.tipo === 'transferencia') {
+        let e = 0;
+        if (m.cuentaId === cuentaId) e -= monto;
+        if (m.cuentaDestinoId === cuentaId) e += monto;
+        return e;
+    }
+    return 0;
+}
+
+function dibujarGraficaSaldo(puntos) {
+    const w = 600, h = 220, pad = 30;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+
+    const valores = puntos.map(p => p.saldo);
+    let min = Math.min(...valores, 0), max = Math.max(...valores, 0);
+    if (min === max) { min -= 1; max += 1; }
+    const rango = max - min;
+    const xStep = puntos.length > 1 ? (w - 2 * pad) / (puntos.length - 1) : 0;
+    const yDe = (valor) => h - pad - ((valor - min) / rango) * (h - 2 * pad);
+
+    // Línea de referencia en 0
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, yDe(0)); ctx.lineTo(w - pad, yDe(0)); ctx.stroke();
+
+    // Línea de evolución del saldo
+    ctx.strokeStyle = '#0d1b33'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    puntos.forEach((p, i) => {
+        const x = pad + i * xStep, y = yDe(p.saldo);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Puntos
+    ctx.fillStyle = '#0d1b33';
+    puntos.forEach((p, i) => {
+        const x = pad + i * xStep, y = yDe(p.saldo);
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    });
+
+    return canvas.toDataURL('image/png');
+}
+
+async function generarReporte() {
+    const btn = $('btnGenerarReporte');
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    try {
+        const cuentaId = $('repCuenta').value || null;
+        const tipoPeriodo = $('repPeriodoTipo').value;
+        const hoy = new Date();
+        let desde = null, hasta = null;
+
+        if (tipoPeriodo === 'mes-actual') {
+            desde = `${hoy.getFullYear()}-${pad2(hoy.getMonth() + 1)}-01`;
+            hasta = fechaLocalISO(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0));
+        } else if (tipoPeriodo === 'mes-anterior') {
+            const finAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+            const inicioAnterior = new Date(finAnterior.getFullYear(), finAnterior.getMonth(), 1);
+            desde = fechaLocalISO(inicioAnterior);
+            hasta = fechaLocalISO(finAnterior);
+        } else if (tipoPeriodo === 'personalizado') {
+            desde = $('repDesde').value || null;
+            hasta = $('repHasta').value || null;
+        } // 'todo' deja desde/hasta en null
+
+        const nombreCuenta = cuentaId ? (_cuentas.find(c => c.id === cuentaId)?.nombre || 'Cuenta') : null;
+        const titulo = cuentaId ? `Estado de cuenta: ${nombreCuenta}` : 'Estado de cuenta global';
+        const periodoTexto = (!desde && !hasta) ? 'Todo el historial' : `${fechaBonita(desde || '')} a ${fechaBonita(hasta || '')}`;
+
+        const movsAlcance = _movimientos.filter(m => cuentaId ? (m.cuentaId === cuentaId || m.cuentaDestinoId === cuentaId) : true);
+
+        const base = cuentaId
+            ? (Number(_cuentas.find(c => c.id === cuentaId)?.saldoInicial) || 0)
+            : _cuentas.reduce((s, c) => s + (Number(c.saldoInicial) || 0), 0);
+
+        let saldoInicialPeriodo = base;
+        if (desde) {
+            movsAlcance.filter(m => (m.fecha || '') < desde).forEach(m => { saldoInicialPeriodo += efectoMovimientoReporte(m, cuentaId); });
+        }
+
+        let movsPeriodo = movsAlcance.filter(m => (!desde || (m.fecha || '') >= desde) && (!hasta || (m.fecha || '') <= hasta));
+        movsPeriodo = movsPeriodo.slice().sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+
+        let saldo = saldoInicialPeriodo, ingresos = 0, egresos = 0;
+        const filas = movsPeriodo.map(m => {
+            const efecto = efectoMovimientoReporte(m, cuentaId);
+            saldo += efecto;
+            if (efecto > 0) ingresos += efecto; else egresos += -efecto;
+            return { m, efecto, saldoAcumulado: saldo };
+        });
+        const saldoFinal = saldo;
+
+        const divsPeriodo = _dividendos.filter(d =>
+            (cuentaId ? d.cuentaId === cuentaId : true) &&
+            (!desde || (d.fecha || '') >= desde) && (!hasta || (d.fecha || '') <= hasta)
+        );
+        const totalDividendos = divsPeriodo.reduce((s, d) => s + (Number(d.monto) || 0), 0);
+
+        const puntos = [{ fecha: desde || (movsPeriodo[0]?.fecha || fechaLocalISO(hoy)), saldo: saldoInicialPeriodo },
+            ...filas.map(f => ({ fecha: f.m.fecha, saldo: f.saldoAcumulado }))];
+        const chartDataUrl = dibujarGraficaSaldo(puntos);
+
+        const filasHtml = filas.map(f => {
+            const m = f.m;
+            const etiqueta = m.tipo === 'deposito' ? (m.esDividendo ? 'Dividendo' : 'Depósito') : m.tipo === 'retiro' ? 'Retiro' : 'Transferencia';
+            let detalleCuenta = '';
+            if (!cuentaId) {
+                const cOrig = _cuentas.find(c => c.id === m.cuentaId)?.nombre || '?';
+                const cDest = _cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre;
+                detalleCuenta = m.tipo === 'transferencia' ? `${cOrig} → ${cDest || '?'}` : cOrig;
+            } else if (m.tipo === 'transferencia') {
+                detalleCuenta = m.cuentaId === cuentaId
+                    ? `Salida → ${_cuentas.find(c => c.id === m.cuentaDestinoId)?.nombre || '?'}`
+                    : `Entrada ← ${_cuentas.find(c => c.id === m.cuentaId)?.nombre || '?'}`;
+            }
+            const colorMonto = f.efecto >= 0 ? '#16a34a' : '#dc2626';
+            const signo = f.efecto >= 0 ? '+' : '-';
+            return `<tr>
+                <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b;white-space:nowrap;">${fechaBonita(m.fecha)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${etiqueta}${detalleCuenta ? `<br><span style="color:#64748b;font-size:10.5px;">${esc(detalleCuenta)}</span>` : ''}${m.concepto ? `<br><span style="color:#64748b;font-size:10.5px;">${esc(m.concepto)}</span>` : ''}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700;color:${colorMonto};text-align:right;white-space:nowrap;">${signo}${dinero(Math.abs(f.efecto))}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700;text-align:right;white-space:nowrap;">${dinero(f.saldoAcumulado)}</td>
+            </tr>`;
+        }).join('');
+
+        const generado = hoy.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+
+        const htmlReporte = `
+        <div style="width:640px;background:#ffffff;padding:28px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0d1b33;padding-bottom:14px;margin-bottom:4px;">
+                <div style="font-size:20px;font-weight:800;color:#0d1b33;">🌎 One Terra</div>
+                <div style="text-align:right;font-size:11px;color:#64748b;">Generado: ${esc(generado)}</div>
+            </div>
+            <div style="height:3px;background:#c99a3f;margin-bottom:18px;"></div>
+            <div style="font-size:16px;font-weight:800;margin-bottom:2px;">${esc(titulo)}</div>
+            <div style="font-size:12.5px;color:#64748b;margin-bottom:18px;">Periodo: ${esc(periodoTexto)}</div>
+
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;">
+                <div style="background:#e9f5f3;border-radius:10px;padding:12px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;">SALDO INICIAL</div>
+                    <div style="font-size:18px;font-weight:800;color:#0d1b33;">${dinero(saldoInicialPeriodo)}</div>
+                </div>
+                <div style="background:#e9f5f3;border-radius:10px;padding:12px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;">SALDO FINAL</div>
+                    <div style="font-size:18px;font-weight:800;color:#0d1b33;">${dinero(saldoFinal)}</div>
+                </div>
+                <div style="background:#e9f5f3;border-radius:10px;padding:12px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;">INGRESOS</div>
+                    <div style="font-size:18px;font-weight:800;color:#16a34a;">+${dinero(ingresos)}</div>
+                </div>
+                <div style="background:#e9f5f3;border-radius:10px;padding:12px;">
+                    <div style="font-size:11px;color:#64748b;font-weight:700;">EGRESOS</div>
+                    <div style="font-size:18px;font-weight:800;color:#dc2626;">-${dinero(egresos)}</div>
+                </div>
+            </div>
+
+            ${totalDividendos > 0 ? `<div style="background:#f0fdf4;border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:12px;color:#166534;">📈 Dividendos recibidos en el periodo: <strong>${dinero(totalDividendos)}</strong></div>` : ''}
+
+            <div style="font-size:12.5px;font-weight:700;color:#0d1b33;margin-bottom:6px;">Evolución del saldo</div>
+            <img src="${chartDataUrl}" style="width:100%;display:block;margin-bottom:18px;border:1px solid #e2e8f0;border-radius:8px;">
+
+            <div style="font-size:12.5px;font-weight:700;color:#0d1b33;margin-bottom:6px;">Movimientos del periodo (${filas.length})</div>
+            ${filas.length ? `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr>
+                    <th style="text-align:left;padding:6px 8px;font-size:10.5px;color:#64748b;border-bottom:2px solid #0d1b33;">FECHA</th>
+                    <th style="text-align:left;padding:6px 8px;font-size:10.5px;color:#64748b;border-bottom:2px solid #0d1b33;">DETALLE</th>
+                    <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#64748b;border-bottom:2px solid #0d1b33;">MONTO</th>
+                    <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#64748b;border-bottom:2px solid #0d1b33;">SALDO</th>
+                </tr></thead>
+                <tbody>${filasHtml}</tbody>
+            </table>` : `<div style="text-align:center;color:#94a3b8;font-size:12.5px;padding:16px 0;">No hay movimientos en este periodo.</div>`}
+
+            <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10.5px;color:#94a3b8;text-align:center;">Generado con One Terra</div>
+        </div>`;
+
+        const contenedor = $('repRenderArea');
+        contenedor.innerHTML = htmlReporte;
+
+        // Deja que el navegador pinte el contenido (y la imagen del gráfico) antes de capturar
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        const canvasFinal = await html2canvas(contenedor.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        _ultimoReporteDataUrl = canvasFinal.toDataURL('image/png');
+        _ultimoReporteNombre = `estado-cuenta-${cuentaId ? slugify(nombreCuenta) : 'global'}-${fechaLocalISO(hoy)}.png`;
+
+        $('repPreviewImg').src = _ultimoReporteDataUrl;
+        $('repResultado').style.display = 'block';
+    } catch (err) {
+        alert('No se pudo generar el reporte: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🖼️ Generar imagen';
+    }
+}
+
+function descargarReporte() {
+    if (!_ultimoReporteDataUrl) return;
+    const a = document.createElement('a');
+    a.href = _ultimoReporteDataUrl;
+    a.download = _ultimoReporteNombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+async function compartirReporte() {
+    if (!_ultimoReporteDataUrl) return;
+    try {
+        const blob = await (await fetch(_ultimoReporteDataUrl)).blob();
+        const archivo = new File([blob], _ultimoReporteNombre, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+            await navigator.share({ files: [archivo], title: 'Estado de cuenta', text: 'Estado de cuenta - One Terra' });
+        } else {
+            descargarReporte();
+            alert('Tu navegador no soporta compartir archivos directamente -- se descargó la imagen, compártela manualmente por WhatsApp o correo.');
+        }
+    } catch (err) {
+        if (err.name !== 'AbortError') alert('No se pudo compartir: ' + err.message);
+    }
+}
